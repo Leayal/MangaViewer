@@ -28,6 +28,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\VisualTreeHelper\VisualTreeHelper.csproj" />
+    <ProjectReference Include="..\WPF-SmoothScroller\WPF-SmoothScroller.csproj" />
   </ItemGroup>
 
 </Project>

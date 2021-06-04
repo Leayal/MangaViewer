@@ -1,0 +1,3 @@
+[submodule "WPF-SmoothScroller"]
+	path = WPF-SmoothScroller
+	url = https://github.com/Leayal/WPF-SmoothScroller.git
