@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="css/home.css" />
+    <script type="text/javascript" src="js/jquery-3.6.0.slim.min.js"></script>
+    <script type="text/javascript" src="js/home.js"></script>
+    <title>Manga Viewer</title>
+</head>
+<body class="no-archive">
+    <div class="status-label">
+        <span>Please load an archive or a folder.</span>
+    </div>
+    <div class="root grid vertical">
+        <div class="overlay header">
+            <div class="grid horizontal">
+                <div><img id="img-cover" /></div>
+                <div class="grid horizontal">
+                    <div>
+                        <span id="manga-name">Manga Name</span>
+                    </div>
+                    <div>
+                        <span id="manga-author">Author</span>
+                    </div>
+                    <div>
+                        <span id="manga-chapter">Chapter</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="img-list" id="content"></div>
+        <div class="footer">
+            <div class="overlay page-number">
+                <span>Page:</span>
+                <select id="page-selector"></select>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
