@@ -87,21 +87,8 @@ namespace Leayal.MangaViewer
             this.cancelSrc.Cancel();
             this.web.CoreWebView2?.Stop();
             this.web.Dispose();
-            this.CloseViewer();
+            this.CloseCurrentArchive();
             base.OnFormClosed(e);
-        }
-
-        private void CloseViewer()
-        {
-            lock (this.mapping_filenames)
-            {
-                this.mapping_filenames.Clear();
-            }
-            lock (this.mapping_filestreams)
-            {
-                this.mapping_filestreams.Clear();
-            }
-            this.currentArchive?.Dispose();
         }
 
         private async void Form1_Shown(object sender, EventArgs e)
@@ -184,6 +171,10 @@ namespace Leayal.MangaViewer
                 {
                     await this.OpenArchive(duh);
                 }
+                else if (Directory.Exists(duh))
+                {
+                    await this.OpenDirectory(duh);
+                }
             }
             else if (this._IsArchiveLoaded)
             {
@@ -198,7 +189,7 @@ namespace Leayal.MangaViewer
 
         private async void CloseToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            this.CloseViewer();
+            this.CloseCurrentArchive();
             (await this.t_webCore).Reload();
         }
 
@@ -209,21 +200,7 @@ namespace Leayal.MangaViewer
                 var directoryPath = BrowseForDirectory();
                 if (!string.IsNullOrEmpty(directoryPath))
                 {
-                    this.currentArchive?.Dispose();
-                    try
-                    {
-                        this.currentArchive = new Classes.DirectoryAsArchive(directoryPath);
-                        this.archiveName = Path.GetFileName(directoryPath);
-                        this.t_parseArchive = Task.Factory.StartNew(this.ParseArchive, this.currentArchive);
-                        await this.t_parseArchive;
-                        this.OnLoadArchiveComplete();
-                    }
-                    catch
-                    {
-                        this.currentArchive?.Dispose();
-                        this.currentArchive = null;
-                        throw;
-                    }
+                    await this.OpenDirectory(directoryPath);
                 }
             }
             catch (Exception ex)
@@ -248,9 +225,27 @@ namespace Leayal.MangaViewer
             }
         }
 
+        private async Task OpenDirectory(string directoryPath)
+        {
+            this.CloseCurrentArchive();
+            try
+            {
+                this.currentArchive = new Classes.DirectoryAsArchive(directoryPath);
+                this.archiveName = Path.GetFileName(directoryPath);
+                this.t_parseArchive = Task.Factory.StartNew(this.ParseArchive, this.currentArchive);
+                await this.t_parseArchive;
+                this.OnLoadArchiveComplete();
+            }
+            catch
+            {
+                this.CloseCurrentArchive();
+                throw;
+            }
+        }
+
         private async Task OpenArchive(string filename)
         {
-            this.currentArchive?.Dispose();
+            this.CloseCurrentArchive();
             var fs = File.OpenRead(filename);
             try
             {
@@ -269,8 +264,7 @@ namespace Leayal.MangaViewer
             }
             catch
             {
-                this.currentArchive?.Dispose();
-                this.currentArchive = null;
+                this.CloseCurrentArchive();
                 fs.Dispose();
                 throw;
             }
@@ -292,14 +286,23 @@ namespace Leayal.MangaViewer
                                 var entry = walker.Entry;
                                 if (!entry.IsDirectory)
                                 {
-                                    var name = NormalizeFilePath(entry.Key.AsMemory());
-                                    this.mapping_filenames.Add(name);
-                                    var stream = memMgr.GetStream(name);
-                                    stream.Position = 0;
-                                    stream.SetLength(entry.Size);
-                                    walker.WriteEntryTo(stream);
-                                    stream.Position = 0;
-                                    this.mapping_filestreams.Add(name, stream);
+                                    if (entry is Classes.DirectoryEntry fakeEntry)
+                                    {
+                                        var name = NormalizeFilePath(fakeEntry.Key.AsMemory());
+                                        this.mapping_filenames.Add(name);
+                                        this.mapping_filestreams.Add(name, fakeEntry.OpenStream());
+                                    }
+                                    else
+                                    {
+                                        var name = NormalizeFilePath(entry.Key.AsMemory());
+                                        this.mapping_filenames.Add(name);
+                                        var stream = memMgr.GetStream(name);
+                                        stream.Position = 0;
+                                        stream.SetLength(entry.Size);
+                                        walker.WriteEntryTo(stream);
+                                        stream.Position = 0;
+                                        this.mapping_filestreams.Add(name, stream);
+                                    }
                                 }
                             }
                         }
@@ -426,6 +429,28 @@ namespace Leayal.MangaViewer
                         }
                     }
                 });
+            }
+        }
+
+        private void CloseCurrentArchive()
+        {
+            if (this.currentArchive is not null)
+            {
+                this.currentArchive.Dispose();
+                this.currentArchive = null;
+            }
+            this.archiveName = string.Empty;
+            lock (this.mapping_filenames)
+            {
+                this.mapping_filenames.Clear();
+            }
+            lock (this.mapping_filestreams)
+            {
+                foreach (var stream in this.mapping_filestreams.Values)
+                {
+                    stream.Dispose();
+                }
+                this.mapping_filestreams.Clear();
             }
         }
 

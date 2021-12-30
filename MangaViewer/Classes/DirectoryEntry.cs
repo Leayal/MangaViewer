@@ -18,6 +18,8 @@ namespace Leayal.MangaViewer.Classes
             this.InfoFile = new FileInfo(fullpath);
         }
 
+        public FileStream OpenStream() => this.InfoFile.OpenRead();
+
         public CompressionType CompressionType => CompressionType.None;
 
         public DateTime? ArchivedTime => this.InfoFile.LastAccessTime;
