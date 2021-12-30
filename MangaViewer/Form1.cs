@@ -204,32 +204,24 @@ namespace Leayal.MangaViewer
 
         private async void OpenFolderToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            return;
             try
             {
-                var filename = BrowseForDirectory();
-                if (!string.IsNullOrEmpty(filename))
+                var directoryPath = BrowseForDirectory();
+                if (!string.IsNullOrEmpty(directoryPath))
                 {
                     this.currentArchive?.Dispose();
-                    var fs = File.OpenRead(filename);
                     try
                     {
-                        if (SharpCompress.Archives.SevenZip.SevenZipArchive.IsSevenZipFile(fs))
-                        {
-                            this.currentArchive = SharpCompress.Archives.SevenZip.SevenZipArchive.Open(filename, new ReaderOptions() { LeaveStreamOpen = false });
-                        }
-                        else
-                        {
-                            this.currentArchive = ArchiveFactory.Open(filename, new ReaderOptions() { LeaveStreamOpen = false });
-                        }
-                        this.archiveName = Path.GetFileName(fs.Name);
+                        this.currentArchive = new Classes.DirectoryAsArchive(directoryPath);
+                        this.archiveName = Path.GetFileName(directoryPath);
                         this.t_parseArchive = Task.Factory.StartNew(this.ParseArchive, this.currentArchive);
                         await this.t_parseArchive;
                         this.OnLoadArchiveComplete();
                     }
                     catch
                     {
-                        fs.Dispose();
+                        this.currentArchive?.Dispose();
+                        this.currentArchive = null;
                         throw;
                     }
                 }
@@ -277,6 +269,8 @@ namespace Leayal.MangaViewer
             }
             catch
             {
+                this.currentArchive?.Dispose();
+                this.currentArchive = null;
                 fs.Dispose();
                 throw;
             }
@@ -298,7 +292,7 @@ namespace Leayal.MangaViewer
                                 var entry = walker.Entry;
                                 if (!entry.IsDirectory)
                                 {
-                                    var name = entry.Key.Replace('\\', '/');
+                                    var name = NormalizeFilePath(entry.Key.AsMemory());
                                     this.mapping_filenames.Add(name);
                                     var stream = memMgr.GetStream(name);
                                     stream.Position = 0;
@@ -371,7 +365,7 @@ namespace Leayal.MangaViewer
                     {
                         await this.t_parseArchive;
                     }
-                    var path = e.Request.Uri.Substring(Uri_ArchiveGetImage.Length).Replace('/', '\\');
+                    var path = NormalizeFilePath(GetRelativePathFromUrl(e.Request.Uri));
                     if (this.mapping_filestreams.TryGetValue(path, out var stream))
                     {
                         stream.Position = 0;
@@ -397,6 +391,41 @@ namespace Leayal.MangaViewer
                         e.Response = rep;
                     }
                 }
+            }
+        }
+
+        private static ReadOnlyMemory<char> GetRelativePathFromUrl(string url)
+        {
+            if (url.Length > Uri_ArchiveGetImage.Length)
+            {
+                return url.AsMemory(Uri_ArchiveGetImage.Length);
+            }
+            else
+            {
+                return url.AsMemory();
+            }
+        }
+
+        private static string NormalizeFilePath(in ReadOnlyMemory<char> path)
+        {
+            var mem = path.Trim();
+            if (mem.Length == 0)
+            {
+                return string.Empty;
+            }
+            else
+            {
+                return string.Create<ReadOnlyMemory<char>>(mem.Length, mem, (c, state) =>
+                {
+                    state.Span.CopyTo(c);
+                    for (int i = 0; i < c.Length; i++)
+                    {
+                        if (c[i] == Path.AltDirectorySeparatorChar)
+                        {
+                            c[i] = Path.DirectorySeparatorChar;
+                        }
+                    }
+                });
             }
         }
 
