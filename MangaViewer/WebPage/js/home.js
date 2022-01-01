@@ -1,6 +1,32 @@
 (function (w, d) {
+
+    const interop_func = (function () {
+        const obj = Object.create(null);
+        Object.defineProperty(obj, "tryAddFunc", {
+            configurable: false,
+            writable: false,
+            enumerable: false,
+            value: (function (functionName, func, isSealed = false) {
+                if (!functionName || typeof (functionName) !== "string") {
+                    console.error("tryAddFunc with non-string 'functionName' param");
+                } else {
+                    if (typeof (func) === "function") {
+                        Object.defineProperty(obj, functionName, {
+                            configurable: !!!isSealed,
+                            enumerable: true,
+                            writable: false,
+                            value: func
+                        });
+                    } else {
+                        console.error("tryAddFunc with non-function 'func' param");
+                    }
+                }
+            }).bind(obj)
+        });
+        return obj;
+    })();
+
     d.addEventListener("DOMContentLoaded", async function () {
-        d.title = "";
         const leayalobj = w.chrome.webview.hostObjects.leayal,
             label_mangaName = d.getElementById("manga-name"),
             div_mangaAuthor = d.getElementById("div-manga-author"),
@@ -79,7 +105,7 @@
             threshold: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
         });
 
-        const func_loadManga = async function () {
+        interop_func.tryAddFunc("loadManga", async function () {
             var str = await leayalobj.OpenArchive();
             if (str) {
                 var obj = JSON.parse(str);
@@ -99,7 +125,7 @@
                 }
 
                 let coverurl = obj.cover || "";
-                
+
                 const pages = obj.images;
                 clearAllChildNodes(pageSelector);
                 clearAllChildNodes(imgList);
@@ -141,42 +167,53 @@
                 classlist.remove("loaded");
                 classlist.add("no-archive");
             }
-        }
+        }, true);
+
+        interop_func.tryAddFunc("setState", function (state_name) {
+            if (state_name === "no-archive") {
+                const classlist = d.body.classList;
+                classlist.remove("loading");
+                classlist.remove("loaded");
+                classlist.add("no-archive");
+                clearAllChildNodes(pageSelector);
+                clearAllChildNodes(imgList);
+                d.title = "";
+            } else if (state_name === "loading") {
+                const classlist = d.body.classList;
+                classlist.remove("no-archive");
+                classlist.remove("loaded");
+                classlist.add("loading");
+                d.title = "Loading";
+                clearAllChildNodes(pageSelector);
+                clearAllChildNodes(imgList);
+            } else if (state_name === "loaded") {
+                const classlist = d.body.classList;
+                classlist.remove("loading");
+                classlist.remove("no-archive");
+                classlist.add("loaded");
+            }
+        }, true);
 
         w.chrome.webview.addEventListener("message", async function (arg) {
             if ("cmd" in arg.data) {
                 const cmd = arg.data["cmd"];
                 const args = ("args" in arg.data && Array.isArray(arg.data["args"]) ? arg.data["args"] : []);
-                if (cmd === "setState") {
-                    const state_name = args[0];
-                    if (state_name === "no-archive") {
-                        const classlist = d.body.classList;
-                        classlist.remove("loading");
-                        classlist.remove("loaded");
-                        classlist.add("no-archive");
-                        clearAllChildNodes(pageSelector);
-                        clearAllChildNodes(imgList);
-                        d.title = "";
-                    } else if (state_name === "loading") {
-                        const classlist = d.body.classList;
-                        classlist.remove("no-archive");
-                        classlist.remove("loaded");
-                        classlist.add("loading");
-                        d.title = "Loading";
-                        clearAllChildNodes(pageSelector);
-                        clearAllChildNodes(imgList);
-                    } else if (state_name === "loaded") {
-                        const classlist = d.body.classList;
-                        classlist.remove("loading");
-                        classlist.remove("no-archive");
-                        classlist.add("loaded");
+                if (cmd in interop_func) {
+                    const func = interop_func[cmd];
+                    if (args.length === 0) {
+                        func();
+                    } else {
+                        func.apply(this, args);
                     }
-                } else if (cmd === "loadManga") {
-                    await func_loadManga();
                 }
                 w.chrome.webview.postMessage(arg.data);
             }
         });
+
+        // Call this here so that, in case user press F5/Refresh the webpage.
+        // The browser will reload the manga after reloading the webpage.
+        // In case the app has loaded a manga.
+        interop_func.loadManga();
 
         w.chrome.webview.postMessage({
             event: "web-core-ready"
