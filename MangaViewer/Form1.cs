@@ -8,6 +8,8 @@ using SharpCompress.Common;
 using SharpCompress.IO;
 using SharpCompress.Readers;
 using System.Runtime.InteropServices;
+using System.ComponentModel;
+using Leayal.MangaViewer.Classes;
 
 namespace Leayal.MangaViewer
 {
@@ -16,8 +18,7 @@ namespace Leayal.MangaViewer
         const string Uri_WebHome = "file://app/web/",
             Uri_ArchiveInfo = "file://app/archive/info/",
             Uri_ArchiveOpen = "file://app/archive/open/",
-            Uri_ArchiveGetImage = "file://app/archive/image/",
-            Uri_ArchiveGetImageList = "file://app/archive/imagelist/";
+            Uri_ArchiveGetImage = "file://app/archive/image/";
 
         internal static readonly RecyclableMemoryStreamManager memMgr;
         internal static readonly Assembly CurrentMe;
@@ -31,8 +32,6 @@ namespace Leayal.MangaViewer
         private readonly WebView2 web;
         private readonly CancellationTokenSource cancelSrc;
         private CoreWebView2Environment webEnv;
-        private Task<CoreWebView2> t_webCore;
-        private bool _IsArchiveLoaded;
         internal readonly Dictionary<string, Stream> mapping_filestreams;
         internal readonly List<string> mapping_filenames;
         private IArchive? currentArchive;
@@ -41,6 +40,11 @@ namespace Leayal.MangaViewer
         private readonly BrowserController controller;
         private bool addedController;
         private string? _preopenSomething;
+        private readonly string _originalTitle;
+        private readonly TaskCompletionSource<WebBrowserTask> tSrc_webTask;
+        private readonly Task<WebBrowserTask> t_webTask;
+        private readonly TaskCompletionSource<CoreWebView2> tSrc_webCore;
+        private readonly Task<CoreWebView2> t_webCore;
 
         public Form1() : this(string.Empty) { }
 
@@ -50,14 +54,20 @@ namespace Leayal.MangaViewer
             this.currentArchive = null;
             this.mapping_filestreams = new Dictionary<string, Stream>(StringComparer.OrdinalIgnoreCase);
             this.mapping_filenames = new List<string>();
-            this._IsArchiveLoaded = false;
             this.cancelSrc = new CancellationTokenSource();
-            this.controller = new BrowserController(this);
+            this.controller = new BrowserController(this, Uri_ArchiveGetImage);
             this.addedController = false;
+
+            this.tSrc_webCore = new TaskCompletionSource<CoreWebView2>();
+            this.t_webCore = this.tSrc_webCore.Task;
+            this.tSrc_webTask = new TaskCompletionSource<WebBrowserTask>();
+            this.t_webTask = this.tSrc_webTask.Task;
 
             this._preopenSomething = preopenSomething;
 
             InitializeComponent();
+            this._originalTitle = this.Text;
+            this.LoadFormState();
 
             var h = this.menu_main.Height;
 
@@ -82,8 +92,92 @@ namespace Leayal.MangaViewer
             }
         }
 
+        protected override void OnClosing(CancelEventArgs e)
+        {
+            base.OnClosing(e);
+            this.SaveFormState();
+        }
+
+        public void LoadFormState()
+        {
+            var filepath = Path.GetFullPath("window-state.json", Application.StartupPath);
+            if (File.Exists(filepath))
+            {
+                using (var fs = File.OpenRead(filepath))
+                {
+                    if (fs.Length != 0)
+                    {
+                        using (var jsondoc = JsonDocument.Parse(fs))
+                        {
+                            var root = jsondoc.RootElement;
+                            if (root.TryGetProperty("x", out var prop_x) && prop_x.ValueKind == JsonValueKind.Number
+                                && root.TryGetProperty("y", out var prop_y) && prop_y.ValueKind == JsonValueKind.Number
+                                && root.TryGetProperty("width", out var prop_width) && prop_width.ValueKind == JsonValueKind.Number
+                                && root.TryGetProperty("height", out var prop_height) && prop_height.ValueKind == JsonValueKind.Number)
+                            {
+                                int x = prop_x.GetInt32(), y = prop_y.GetInt32(), width = prop_width.GetInt32(), height = prop_height.GetInt32();
+                                var desktopBound = Screen.GetBounds(this);
+                                var formBound = new Rectangle(x, y, width, height);
+                                if (desktopBound.Contains(formBound))
+                                {
+                                    bool isMaximized = (root.TryGetProperty("maximized", out var prop_maximized) && prop_maximized.ValueKind == JsonValueKind.True);
+                                    var previousstate = this.WindowState;
+                                    if (previousstate == FormWindowState.Maximized || previousstate == FormWindowState.Minimized)
+                                    {
+                                        this.WindowState = FormWindowState.Normal;
+                                    }
+                                    this.Location = formBound.Location;
+                                    this.Size = formBound.Size;
+                                    if (isMaximized)
+                                    {
+                                        this.WindowState = FormWindowState.Maximized;
+                                    }
+                                    else
+                                    {
+                                        this.WindowState = previousstate;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        public void SaveFormState()
+        {
+            using (var fs = File.Create(Path.GetFullPath("window-state.json", Application.StartupPath)))
+            using (var writer = new Utf8JsonWriter(fs))
+            {
+                var state = this.WindowState;
+                Rectangle bound;
+                writer.WriteStartObject();
+                switch (state)
+                {
+                    case FormWindowState.Maximized:
+                    case FormWindowState.Minimized:
+                        bound = this.RestoreBounds;
+                        break;
+                    default:
+                        bound = new Rectangle(this.Location, this.Size);
+                        break;
+                }
+                writer.WriteNumber("x", bound.X);
+                writer.WriteNumber("y", bound.Y);
+                writer.WriteNumber("width", bound.Width);
+                writer.WriteNumber("height", bound.Height);
+                writer.WriteBoolean("maximized", (state == FormWindowState.Maximized));
+                writer.WriteEndObject();
+                writer.Flush();
+            }
+        }
+
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
+            if (this.t_webTask.IsCompletedSuccessfully)
+            {
+                this.t_webTask.Result.Dispose();
+            }
             this.cancelSrc.Cancel();
             this.web.CoreWebView2?.Stop();
             this.web.Dispose();
@@ -94,8 +188,9 @@ namespace Leayal.MangaViewer
         private async void Form1_Shown(object sender, EventArgs e)
         {
             this.webEnv = await CoreWebView2Environment.CreateAsync(this.web.CreationProperties.BrowserExecutableFolder, this.web.CreationProperties.UserDataFolder, new CoreWebView2EnvironmentOptions() { AdditionalBrowserArguments = "--disable-breakpad" });
-            this.t_webCore = InitWebCore(this.webEnv);
-            var core = await this.t_webCore;
+            var core = await InitWebCore(this.webEnv);
+            this.tSrc_webCore.SetResult(core);
+            this.tSrc_webTask.SetResult(new WebBrowserTask(core));
             core.NavigationStarting += this.Core_NavigationStarting;
             core.DocumentTitleChanged += this.Core_DocumentTitleChanged;
             core.AddWebResourceRequestedFilter(Uri_WebHome + "*", CoreWebView2WebResourceContext.All);
@@ -106,17 +201,23 @@ namespace Leayal.MangaViewer
             core.WebResourceRequested += this.Core_WebResourceRequested;
             core.DOMContentLoaded += this.Core_DOMContentLoaded;
             core.ScriptDialogOpening += this.Core_ScriptDialogOpening;
-            
+
+            core.Settings.IsWebMessageEnabled = true;
             core.Settings.IsStatusBarEnabled = false;
             core.Settings.IsGeneralAutofillEnabled = false;
             core.Settings.IsPasswordAutosaveEnabled = false;
             core.Settings.UserAgent = "Leayal Manga Viewer 1.0";
             core.Settings.IsBuiltInErrorPageEnabled = true;
-            core.Settings.AreDefaultScriptDialogsEnabled = false;
             core.Settings.AreHostObjectsAllowed = true;
-            core.Settings.AreDevToolsEnabled = false;
 
-            // core.OpenDevToolsWindow();
+#if DEBUG
+            core.Settings.AreDefaultScriptDialogsEnabled = true;
+            core.Settings.AreDevToolsEnabled = true;
+            core.OpenDevToolsWindow();
+#else
+            core.Settings.AreDevToolsEnabled = false;
+            core.Settings.AreDefaultScriptDialogsEnabled = false;
+#endif
 
             if (Uri.TryCreate(new Uri(Uri_WebHome), "index.html", out var homepage))
             {
@@ -162,11 +263,11 @@ namespace Leayal.MangaViewer
 
         private async void Core_DOMContentLoaded(object? sender, CoreWebView2DOMContentLoadedEventArgs e)
         {
-            // this.webCore.RemoveHostObjectFromScript("leayalMangaObj");
-            if (!string.IsNullOrWhiteSpace(this._preopenSomething))
-            {
-                var duh = this._preopenSomething;
-                this._preopenSomething = null;
+            var duh = Interlocked.Exchange(ref this._preopenSomething, null);
+            await this.t_webCore;
+            await this.t_webTask;
+            if (!string.IsNullOrWhiteSpace(duh))
+            {  
                 if (File.Exists(duh))
                 {
                     await this.OpenArchive(duh);
@@ -175,10 +276,6 @@ namespace Leayal.MangaViewer
                 {
                     await this.OpenDirectory(duh);
                 }
-            }
-            else if (this._IsArchiveLoaded)
-            {
-                (await this.t_webCore).AddHostObjectToScript("leayalMangaObj", null);
             }
         }
 
@@ -190,7 +287,8 @@ namespace Leayal.MangaViewer
         private async void CloseToolStripMenuItem_Click(object sender, EventArgs e)
         {
             this.CloseCurrentArchive();
-            (await this.t_webCore).Reload();
+            // var core = await this.t_webCore;
+            await (await this.t_webTask).SetState("no-archive");
         }
 
         private async void OpenFolderToolStripMenuItem_Click(object sender, EventArgs e)
@@ -227,6 +325,7 @@ namespace Leayal.MangaViewer
 
         private async Task OpenDirectory(string directoryPath)
         {
+            await (await this.t_webTask).SetState("loading");
             this.CloseCurrentArchive();
             try
             {
@@ -234,7 +333,7 @@ namespace Leayal.MangaViewer
                 this.archiveName = Path.GetFileName(directoryPath);
                 this.t_parseArchive = Task.Factory.StartNew(this.ParseArchive, this.currentArchive);
                 await this.t_parseArchive;
-                this.OnLoadArchiveComplete();
+                await this.OnLoadArchiveComplete();
             }
             catch
             {
@@ -245,6 +344,7 @@ namespace Leayal.MangaViewer
 
         private async Task OpenArchive(string filename)
         {
+            await (await this.t_webTask).SetState("loading");
             this.CloseCurrentArchive();
             var fs = File.OpenRead(filename);
             try
@@ -260,7 +360,7 @@ namespace Leayal.MangaViewer
                 this.archiveName = Path.GetFileName(fs.Name);
                 this.t_parseArchive = Task.Factory.StartNew(this.ParseArchive, this.currentArchive);
                 await this.t_parseArchive;
-                this.OnLoadArchiveComplete();
+                await this.OnLoadArchiveComplete();
             }
             catch
             {
@@ -281,43 +381,43 @@ namespace Leayal.MangaViewer
                         this.mapping_filenames.Clear();
                         using (var walker = archive.ExtractAllEntries())
                         {
-                            while (walker.MoveToNextEntry())
+                            try
                             {
-                                var entry = walker.Entry;
-                                if (!entry.IsDirectory)
+                                while (walker.MoveToNextEntry())
                                 {
-                                    if (entry is Classes.DirectoryEntry fakeEntry)
+                                    var entry = walker.Entry;
+                                    if (!entry.IsDirectory)
                                     {
-                                        var name = NormalizeFilePath(fakeEntry.Key.AsMemory());
-                                        this.mapping_filenames.Add(name);
-                                        this.mapping_filestreams.Add(name, fakeEntry.OpenStream());
-                                    }
-                                    else
-                                    {
-                                        var name = NormalizeFilePath(entry.Key.AsMemory());
-                                        this.mapping_filenames.Add(name);
-                                        var stream = memMgr.GetStream(name);
-                                        stream.Position = 0;
-                                        stream.SetLength(entry.Size);
-                                        walker.WriteEntryTo(stream);
-                                        stream.Position = 0;
-                                        this.mapping_filestreams.Add(name, stream);
+                                        if (entry is Classes.DirectoryEntry fakeEntry)
+                                        {
+                                            var name = NormalizeFilePath(fakeEntry.Key.AsMemory());
+                                            this.mapping_filenames.Add(name);
+                                            this.mapping_filestreams.Add(name, fakeEntry.OpenStream());
+                                        }
+                                        else
+                                        {
+                                            var name = NormalizeFilePath(entry.Key.AsMemory());
+                                            this.mapping_filenames.Add(name);
+                                            var stream = memMgr.GetStream(name);
+                                            stream.Position = 0;
+                                            stream.SetLength(entry.Size);
+                                            walker.WriteEntryTo(stream);
+                                            stream.Position = 0;
+                                            this.mapping_filestreams.Add(name, stream);
+                                        }
                                     }
                                 }
                             }
+                            catch { }
                         }
                         this.mapping_filenames.Sort(StrCmpLogicalW);
                     }
             }
         }
 
-        private async void OnLoadArchiveComplete()
+        private async Task OnLoadArchiveComplete()
         {
-            if (this.t_webCore is not null)
-            {
-                var core = await this.t_webCore;
-                core.Reload();
-            }
+            await (await this.t_webTask).LoadManga();
         }
 
         [DllImport("shlwapi.dll", CharSet = CharSet.Unicode)]
@@ -456,7 +556,15 @@ namespace Leayal.MangaViewer
 
         private void Core_DocumentTitleChanged(object? sender, object e)
         {
-            this.Text = this.web.CoreWebView2.DocumentTitle;
+            var documentTitle = this.web.CoreWebView2.DocumentTitle;
+            if (string.IsNullOrEmpty(documentTitle) || documentTitle == "index.html")
+            {
+                this.Text = this._originalTitle;
+            }
+            else
+            {
+                this.Text = $"{this._originalTitle}: {documentTitle}";
+            }
         }
     }
 }

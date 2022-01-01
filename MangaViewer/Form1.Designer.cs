@@ -94,7 +94,7 @@
             this.Controls.Add(this.menu_main);
             this.MainMenuStrip = this.menu_main;
             this.Name = "Form1";
-            this.Text = "Form1";
+            this.Text = "Leayal Manga Viewer";
             this.Shown += new System.EventHandler(this.Form1_Shown);
             this.menu_main.ResumeLayout(false);
             this.menu_main.PerformLayout();

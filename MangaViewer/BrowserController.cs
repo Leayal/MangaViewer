@@ -56,10 +56,13 @@ namespace Leayal.MangaViewer
     [ComVisible(true)]
     public class BrowserController
     {
+        public string Endpoint_ArchiveGetImage { get; }
+
         private readonly Form1 _form;
-        public BrowserController(Form1 form)
+        public BrowserController(Form1 form, string endpoint_archiveGetImage)
         {
             this._form = form;
+            this.Endpoint_ArchiveGetImage = endpoint_archiveGetImage;
         }
 
         public string OpenArchive()

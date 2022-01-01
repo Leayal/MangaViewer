@@ -1,22 +1,43 @@
 html,
 body {
-  background-color: rgb(17, 17, 17);
+    width: 100%;
+    height: 100%;
+    margin: 0px;
+    background-color: rgb(17, 17, 17);
 }
 
-html,
-body,
 .root {
-  width: 100%;
-  margin: 0px;
-  min-height: 100%;
-  height: fit-content;
+    width: 100%;
+    margin: 0px;
+    height: fit-content;
+}
+
+.status-label {
+    height: 100%;
+    width: 100%;
 }
 
 body.no-archive > .status-label {
-  display: flex;
-  height: 100%;
-  width: 100%;
+    display: flex;
+    flex-direction: row;
+    justify-items: center;
 }
+
+body.loading > .status-label {
+    display: flex;
+}
+
+body.loaded > .status-label {
+    display: none;
+}
+
+body.no-archive > .status-label > span::after {
+    content: 'Please load an archive or a folder.';
+}
+
+body.loading > .status-label > span::after {
+    content: 'Loading the manga...';
+}|
 
 .hidden {
   display: none;
@@ -24,6 +45,10 @@ body.no-archive > .status-label {
 
 body.no-archive > .root {
   display: none;
+}
+
+body.loading > .root {
+    display: none;
 }
 
 body.nocover img#img-cover {
@@ -35,8 +60,8 @@ body.nocover img#img-cover {
   justify-content: center;
   align-items: center;
   text-align: center;
-  width: 0px;
-  height: 0px;
+  width: 100%;
+  height: 100%;
 }
 
 .status-label span {

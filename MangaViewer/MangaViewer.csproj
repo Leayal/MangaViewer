@@ -14,14 +14,12 @@
     <None Remove="WebPage\css\home.css" />
     <None Remove="WebPage\index.html" />
     <None Remove="WebPage\js\home.js" />
-    <None Remove="WebPage\js\jquery-3.6.0.slim.min.js" />
   </ItemGroup>
 
   <ItemGroup>
     <EmbeddedResource Include="WebPage\css\home.css" />
     <EmbeddedResource Include="WebPage\index.html" />
     <EmbeddedResource Include="WebPage\js\home.js" />
-    <EmbeddedResource Include="WebPage\js\jquery-3.6.0.slim.min.js" />
   </ItemGroup>
 
   <ItemGroup>
