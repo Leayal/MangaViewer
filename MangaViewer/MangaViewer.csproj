@@ -11,12 +11,14 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Remove="WebPage\css\anim_loading.css" />
     <None Remove="WebPage\css\home.css" />
     <None Remove="WebPage\index.html" />
     <None Remove="WebPage\js\home.js" />
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="WebPage\css\anim_loading.css" />
     <EmbeddedResource Include="WebPage\css\home.css" />
     <EmbeddedResource Include="WebPage\index.html" />
     <EmbeddedResource Include="WebPage\js\home.js" />
