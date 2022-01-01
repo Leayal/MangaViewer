@@ -95,7 +95,10 @@ namespace Leayal.MangaViewer
         protected override void OnClosing(CancelEventArgs e)
         {
             base.OnClosing(e);
-            this.SaveFormState();
+            if (!e.Cancel)
+            {
+                this.SaveFormState();
+            }
         }
 
         public void LoadFormState()
@@ -191,6 +194,10 @@ namespace Leayal.MangaViewer
             var core = await InitWebCore(this.webEnv);
             this.tSrc_webCore.SetResult(core);
             this.tSrc_webTask.SetResult(new WebBrowserTask(core));
+            core.WebResourceRequested += this.Core_WebResourceRequested;
+            // core.DOMContentLoaded += this.Core_DOMContentLoaded;
+            core.WebMessageReceived += this.Core_WebMessageReceived;
+            core.ScriptDialogOpening += this.Core_ScriptDialogOpening;
             core.NavigationStarting += this.Core_NavigationStarting;
             core.DocumentTitleChanged += this.Core_DocumentTitleChanged;
             core.AddWebResourceRequestedFilter(Uri_WebHome + "*", CoreWebView2WebResourceContext.All);
@@ -198,9 +205,6 @@ namespace Leayal.MangaViewer
             core.AddWebResourceRequestedFilter(Uri_ArchiveInfo, CoreWebView2WebResourceContext.XmlHttpRequest);
             core.AddWebResourceRequestedFilter(Uri_ArchiveOpen, CoreWebView2WebResourceContext.All);
             core.AddWebResourceRequestedFilter(Uri_ArchiveGetImage + "*", CoreWebView2WebResourceContext.Image);
-            core.WebResourceRequested += this.Core_WebResourceRequested;
-            core.DOMContentLoaded += this.Core_DOMContentLoaded;
-            core.ScriptDialogOpening += this.Core_ScriptDialogOpening;
 
             core.Settings.IsWebMessageEnabled = true;
             core.Settings.IsStatusBarEnabled = false;
@@ -222,6 +226,43 @@ namespace Leayal.MangaViewer
             if (Uri.TryCreate(new Uri(Uri_WebHome), "index.html", out var homepage))
             {
                 this.web.Source = homepage;
+            }
+        }
+
+        private void Core_WebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
+        {
+            var json = e.WebMessageAsJson;
+            if (!string.IsNullOrEmpty(json))
+            {
+                using (var jsonDocument = JsonDocument.Parse(json))
+                {
+                    if (jsonDocument.RootElement.TryGetProperty("event", out var prop_event) && prop_event.ValueKind == JsonValueKind.String)
+                    {
+                        var eventName = prop_event.GetString();
+                        if (string.Equals(eventName, "web-core-ready", StringComparison.OrdinalIgnoreCase))
+                        {
+                            this.Core_ReadyToBeUsed();
+                        }
+                    }
+                }
+            }
+        }
+
+        private async void Core_ReadyToBeUsed()
+        {
+            var duh = Interlocked.Exchange(ref this._preopenSomething, null);
+            await this.t_webCore;
+            await this.t_webTask;
+            if (!string.IsNullOrWhiteSpace(duh))
+            {
+                if (File.Exists(duh))
+                {
+                    await this.OpenArchive(duh);
+                }
+                else if (Directory.Exists(duh))
+                {
+                    await this.OpenDirectory(duh);
+                }
             }
         }
 
@@ -259,24 +300,6 @@ namespace Leayal.MangaViewer
         {
             await this.web.EnsureCoreWebView2Async(this.webEnv);
             return this.web.CoreWebView2;
-        }
-
-        private async void Core_DOMContentLoaded(object? sender, CoreWebView2DOMContentLoadedEventArgs e)
-        {
-            var duh = Interlocked.Exchange(ref this._preopenSomething, null);
-            await this.t_webCore;
-            await this.t_webTask;
-            if (!string.IsNullOrWhiteSpace(duh))
-            {  
-                if (File.Exists(duh))
-                {
-                    await this.OpenArchive(duh);
-                }
-                else if (Directory.Exists(duh))
-                {
-                    await this.OpenDirectory(duh);
-                }
-            }
         }
 
         private void ExitToolStripMenuItem_Click(object sender, EventArgs e)

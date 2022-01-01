@@ -3,8 +3,11 @@
         d.title = "";
         const leayalobj = w.chrome.webview.hostObjects.leayal,
             label_mangaName = d.getElementById("manga-name"),
+            div_mangaAuthor = d.getElementById("div-manga-author"),
             label_mangaAuthor = d.getElementById("manga-author"),
+            div_mangaChapter = d.getElementById("div-manga-chapter"),
             label_mangaChapter = d.getElementById("manga-chapter"),
+            img_cover = d.getElementById("img-cover"),
             imgList = d.getElementById("content"),
             pageSelector = d.getElementById("page-selector");
 
@@ -80,20 +83,23 @@
             var str = await leayalobj.OpenArchive();
             if (str) {
                 var obj = JSON.parse(str);
-                d.title = obj.name;
-                label_mangaName.textContent = "Manga Name: " + obj.name;
+                label_mangaName.textContent = d.title = obj.name;
+
                 if (obj.author) {
-                    label_mangaAuthor.textContent = "Author: " + obj.author;
-                    label_mangaAuthor.classList.remove("hidden");
+                    label_mangaAuthor.textContent = obj.author;
+                    div_mangaAuthor.classList.remove("hidden");
                 } else {
-                    label_mangaAuthor.classList.add("hidden");
+                    div_mangaAuthor.classList.add("hidden");
                 }
                 if (obj.chapter) {
-                    label_mangaChapter.textContent = "Author: " + obj.author;
-                    label_mangaChapter.classList.remove("hidden");
+                    label_mangaChapter.textContent = obj.author;
+                    div_mangaChapter.classList.remove("hidden");
                 } else {
-                    label_mangaChapter.classList.add("hidden");
+                    div_mangaChapter.classList.add("hidden");
                 }
+
+                let coverurl = obj.cover || "";
+                
                 const pages = obj.images;
                 clearAllChildNodes(pageSelector);
                 clearAllChildNodes(imgList);
@@ -103,6 +109,11 @@
                         const image = d.createElement("img");
                         image.classList.add("manga-page");
                         image.src = uriPrefix_GetImgApi + pages[index];
+
+                        if (!coverurl && index == 0) {
+                            coverurl = uriPrefix_GetImgApi + pages[index];
+                        }
+
                         image.setAttribute("page-number", pageNumber);
                         imgList.appendChild(image);
                         observer.observe(image);
@@ -113,6 +124,12 @@
                     }
                 }
 
+                if (coverurl) {
+                    img_cover.src = coverurl;
+                    img_cover.classList.remove("hidden");
+                } else {
+                    img_cover.classList.add("hidden");
+                }
 
                 const classlist = d.body.classList;
                 classlist.remove("loading");
@@ -159,6 +176,10 @@
                 }
                 w.chrome.webview.postMessage(arg.data);
             }
+        });
+
+        w.chrome.webview.postMessage({
+            event: "web-core-ready"
         });
     });
 })(window, window.document);

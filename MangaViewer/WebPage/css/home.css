@@ -37,7 +37,7 @@ body.no-archive > .status-label > span::after {
 
 body.loading > .status-label > span::after {
     content: 'Loading the manga...';
-}|
+}
 
 .hidden {
   display: none;
@@ -51,17 +51,18 @@ body.loading > .root {
     display: none;
 }
 
-body.nocover img#img-cover {
-  display: none;
+#img-cover {
+    max-height: 100px;
+    max-width: 100px;
 }
 
 .status-label {
-  display: none;
-  justify-content: center;
-  align-items: center;
-  text-align: center;
-  width: 100%;
-  height: 100%;
+    display: none;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    width: 100%;
+    height: 100%;
 }
 
 .status-label span {

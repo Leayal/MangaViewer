@@ -10,7 +10,7 @@ namespace Leayal.MangaViewer.Classes
 {
     class WebBrowserTask : IDisposable
     {
-        private static readonly JsonSerializerOptions jsonOpts = new JsonSerializerOptions() { IncludeFields = true, DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.Never };
+        private static readonly JsonSerializerOptions jsonOpts = new JsonSerializerOptions() { IncludeFields = true, DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull };
         private readonly Dictionary<Guid, TaskCompletionSource> taskMap;
         private readonly CoreWebView2 core;
         private bool _disposed;
@@ -33,7 +33,7 @@ namespace Leayal.MangaViewer.Classes
             {
                 if (this.taskMap.Remove(guid, out var t))
                 {
-                    t.SetResult();
+                    t.TrySetResult();
                 }
             }
         }
@@ -43,10 +43,17 @@ namespace Leayal.MangaViewer.Classes
             var jsonString = e.WebMessageAsJson;
             if (!string.IsNullOrEmpty(jsonString))
             {
-                var obj = JsonSerializer.Deserialize<JsonObj>(jsonString, jsonOpts);
-                if (obj is not null && this.taskMap.Remove(Guid.Parse(obj.guid), out var t))
+                try
                 {
-                    t.SetResult();
+                    var obj = JsonSerializer.Deserialize<JsonObj>(jsonString, jsonOpts);
+                    if (obj is not null && Guid.TryParse(obj.taskguid, out var taskguide) && this.taskMap.Remove(taskguide, out var t))
+                    {
+                        t.TrySetResult();
+                    }
+                }
+                catch (JsonException)
+                {
+
                 }
             }
         }
@@ -61,13 +68,6 @@ namespace Leayal.MangaViewer.Classes
             await this.Run("loadManga", Array.Empty<object>());
         }
 
-        class JsonObj
-        {
-            public string guid;
-            public string cmd;
-            public object[] args;
-        }
-
         public async Task Run(string functionName, params object[] args)
         {
             var t = new TaskCompletionSource();
@@ -76,7 +76,7 @@ namespace Leayal.MangaViewer.Classes
             this.taskMap.Add(guid, t);
 
             var obj = new JsonObj();
-            obj.guid = guid.ToString();
+            obj.taskguid = guid.ToString();
             obj.cmd = functionName;
             obj.args = args ?? Array.Empty<object>();
             try
@@ -88,6 +88,13 @@ namespace Leayal.MangaViewer.Classes
                 this.taskMap.Remove(guid);
                 t.SetResult();
             }
+        }
+
+        class JsonObj
+        {
+            public string taskguid;
+            public string cmd;
+            public object[] args;
         }
     }
 }
