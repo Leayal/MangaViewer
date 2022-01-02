@@ -1,5 +1,6 @@
+"use strict";
 (function (w, d) {
-
+    "use strict";
     const interop_func = (function () {
         const obj = Object.create(null);
         Object.defineProperty(obj, "tryAddFunc", {
@@ -27,6 +28,7 @@
     })();
 
     d.addEventListener("DOMContentLoaded", async function () {
+        "use strict";
         const leayalobj = w.chrome.webview.hostObjects.leayal,
             label_mangaName = d.getElementById("manga-name"),
             div_mangaAuthor = d.getElementById("div-manga-author"),
@@ -106,6 +108,7 @@
         });
 
         interop_func.tryAddFunc("loadManga", async function () {
+            "use strict";
             var str = await leayalobj.OpenArchive();
             if (str) {
                 var obj = JSON.parse(str);
@@ -125,6 +128,7 @@
                 }
 
                 let coverurl = obj.cover || "";
+                let firstImg;
 
                 const pages = obj.images;
                 clearAllChildNodes(pageSelector);
@@ -136,8 +140,11 @@
                         image.classList.add("manga-page");
                         image.src = uriPrefix_GetImgApi + pages[index];
 
-                        if (!coverurl && index == 0) {
-                            coverurl = uriPrefix_GetImgApi + pages[index];
+                        if (index === 0) {
+                            firstImg = image;
+                            if (!coverurl) {
+                                coverurl = uriPrefix_GetImgApi + pages[index];
+                            }
                         }
 
                         image.setAttribute("page-number", pageNumber);
@@ -170,6 +177,7 @@
         }, true);
 
         interop_func.tryAddFunc("setState", function (state_name) {
+            "use strict";
             if (state_name === "no-archive") {
                 const classlist = d.body.classList;
                 classlist.remove("loading");
@@ -195,15 +203,22 @@
         }, true);
 
         w.chrome.webview.addEventListener("message", async function (arg) {
+            "use strict";
             if ("cmd" in arg.data) {
                 const cmd = arg.data["cmd"];
                 const args = ("args" in arg.data && Array.isArray(arg.data["args"]) ? arg.data["args"] : []);
                 if (cmd in interop_func) {
                     const func = interop_func[cmd];
                     if (args.length === 0) {
-                        func();
+                        const o = func();
+                        if (o instanceof Promise) {
+                            await o;
+                        }
                     } else {
-                        func.apply(this, args);
+                        const o = func.apply(this, args);
+                        if (o instanceof Promise) {
+                            await o;
+                        }
                     }
                 }
                 w.chrome.webview.postMessage(arg.data);

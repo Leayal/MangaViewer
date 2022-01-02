@@ -1,8 +1,7 @@
 {
   "profiles": {
     "MangaViewer": {
-      "commandName": "Project",
-      "commandLineArgs": "\"I:\\Data2\\addd\\Torrent\\Exhentai\\[Courreges Try (Yotarou)] Psyllium ~Oshi no Idol Shimai o Kimooata no Ore ga Chinpo de Saimin Produce~-OriginalSize-LossyWebpX75.zip\""
+      "commandName": "Project"
     }
   }
 }

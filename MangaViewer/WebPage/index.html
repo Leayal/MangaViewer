@@ -19,7 +19,8 @@
             <div></div>
         </div>
     </div>
-    <div class="root grid vertical">
+    <div id="app-root" class="root grid vertical">
+        <div class="img-list" id="content"></div>
         <div class="overlay header">
             <div class="grid vertical">
                 <div><img id="img-cover" /></div>
@@ -39,11 +40,10 @@
                 </div>
             </div>
         </div>
-        <div class="img-list" id="content"></div>
         <div class="footer">
             <div class="overlay page-number">
                 <span>Page:</span>
-                <select id="page-selector"></select>
+                <select tabindex="-1" id="page-selector"></select>
             </div>
         </div>
     </div>
