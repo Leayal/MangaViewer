@@ -32,8 +32,8 @@ namespace Leayal.MangaViewer
         private readonly WebView2 web;
         private readonly CancellationTokenSource cancelSrc;
         private CoreWebView2Environment webEnv;
-        internal readonly Dictionary<string, Stream> mapping_filestreams;
-        internal readonly List<string> mapping_filenames;
+        internal readonly Dictionary<Guid, StreamInfo> mapping_filestreams;
+        internal readonly SortedList<string, Guid> mapping_filenames;
         private IArchive? currentArchive;
         internal Task? t_parseArchive;
         internal string archiveName;
@@ -52,8 +52,8 @@ namespace Leayal.MangaViewer
         {
             this.archiveName = string.Empty;
             this.currentArchive = null;
-            this.mapping_filestreams = new Dictionary<string, Stream>(StringComparer.OrdinalIgnoreCase);
-            this.mapping_filenames = new List<string>();
+            this.mapping_filestreams = new Dictionary<Guid, StreamInfo>();
+            this.mapping_filenames = new SortedList<string, Guid>(NaturalComparer.Default);
             this.cancelSrc = new CancellationTokenSource();
             this.controller = new BrowserController(this, Uri_ArchiveGetImage);
             this.addedController = false;
@@ -413,27 +413,26 @@ namespace Leayal.MangaViewer
                                     {
                                         if (entry is Classes.DirectoryEntry fakeEntry)
                                         {
-                                            var name = NormalizeFilePath(fakeEntry.Key.AsMemory());
-                                            this.mapping_filenames.Add(name);
-                                            this.mapping_filestreams.Add(name, fakeEntry.OpenStream());
+                                            var guid = Guid.NewGuid();
+                                            this.mapping_filenames.Add(fakeEntry.Key, guid);
+                                            this.mapping_filestreams.Add(guid, new StreamInfo(fakeEntry.Key, fakeEntry.OpenStream()));
                                         }
                                         else
                                         {
-                                            var name = NormalizeFilePath(entry.Key.AsMemory());
-                                            this.mapping_filenames.Add(name);
-                                            var stream = memMgr.GetStream(name);
+                                            var guid = Guid.NewGuid();
+                                            this.mapping_filenames.Add(entry.Key, guid);
+                                            var stream = new RecyclableMemoryStream(memMgr, guid, entry.Key);
                                             stream.Position = 0;
                                             stream.SetLength(entry.Size);
                                             walker.WriteEntryTo(stream);
                                             stream.Position = 0;
-                                            this.mapping_filestreams.Add(name, stream);
+                                            this.mapping_filestreams.Add(guid, new StreamInfo(entry.Key, stream));
                                         }
                                     }
                                 }
                             }
                             catch { }
                         }
-                        this.mapping_filenames.Sort(StrCmpLogicalW);
                     }
             }
         }
@@ -442,9 +441,6 @@ namespace Leayal.MangaViewer
         {
             await (await this.t_webTask).LoadManga();
         }
-
-        [DllImport("shlwapi.dll", CharSet = CharSet.Unicode)]
-        private static extern int StrCmpLogicalW(string psz1, string psz2);
 
         private async void Core_WebResourceRequested(object? sender, CoreWebView2WebResourceRequestedEventArgs e)
         {
@@ -491,26 +487,28 @@ namespace Leayal.MangaViewer
                     {
                         await this.t_parseArchive;
                     }
-                    var path = NormalizeFilePath(GetRelativePathFromUrl(e.Request.Uri));
-                    if (this.mapping_filestreams.TryGetValue(path, out var stream))
+                    var path = GetRelativePathFromUrl(e.Request.Uri);
+                    if (Guid.TryParse(path.Span, out var guid) && this.mapping_filestreams.TryGetValue(guid, out var streaminfo))
                     {
+                        var stream = streaminfo.DataStream;
+                        var filepath = streaminfo.Name;
                         stream.Position = 0;
                         var rep = this.webEnv.CreateWebResourceResponse(stream, 200, "OK", string.Empty);
                         rep.Headers.AppendHeader("Content-Length", stream.Length.ToString());
                         rep.Headers.AppendHeader("Cache-Control", "no-cache");
-                        if (path.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
+                        if (filepath.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
                         {
                             rep.Headers.AppendHeader("Content-Type", "image/png");
                         }
-                        else if (path.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase))
+                        else if (filepath.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase))
                         {
                             rep.Headers.AppendHeader("Content-Type", "image/jpeg");
                         }
-                        else if (path.EndsWith(".webp", StringComparison.OrdinalIgnoreCase))
+                        else if (filepath.EndsWith(".webp", StringComparison.OrdinalIgnoreCase))
                         {
                             rep.Headers.AppendHeader("Content-Type", "image/webp");
                         }
-                        else if (path.EndsWith(".bmp", StringComparison.OrdinalIgnoreCase))
+                        else if (filepath.EndsWith(".bmp", StringComparison.OrdinalIgnoreCase))
                         {
                             rep.Headers.AppendHeader("Content-Type", "image/bmp");
                         }
@@ -571,7 +569,7 @@ namespace Leayal.MangaViewer
             {
                 foreach (var stream in this.mapping_filestreams.Values)
                 {
-                    stream.Dispose();
+                    stream.DataStream.Dispose();
                 }
                 this.mapping_filestreams.Clear();
             }
@@ -587,6 +585,44 @@ namespace Leayal.MangaViewer
             else
             {
                 this.Text = $"{this._originalTitle}: {documentTitle}";
+            }
+        }
+
+        internal class StreamInfo : IEquatable<StreamInfo>
+        {
+            public readonly string Name;
+            public readonly Stream DataStream;
+
+            public StreamInfo(string name, Stream content)
+            {
+                this.Name = name;
+                this.DataStream = content;
+            }
+
+            public override int GetHashCode() => StringComparer.OrdinalIgnoreCase.GetHashCode(this.Name);
+
+            public override bool Equals(object? obj)
+            {
+                if (obj is StreamInfo other)
+                {
+                    return this.Equals(other);
+                }
+                else
+                {
+                    return false;
+                }
+            }
+
+            public bool Equals(StreamInfo? other)
+            {
+                if (other is null)
+                {
+                    return false;
+                }
+                else
+                {
+                    return string.Equals(this.Name, other.Name, StringComparison.OrdinalIgnoreCase);
+                }
             }
         }
     }

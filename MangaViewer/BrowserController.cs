@@ -88,7 +88,7 @@ namespace Leayal.MangaViewer
                             writer.WriteStartArray("images");
                             foreach (var imgname in collection)
                             {
-                                writer.WriteStringValue(imgname);
+                                writer.WriteStringValue(imgname.Value);
                             }
                             writer.WriteEndArray();
 
