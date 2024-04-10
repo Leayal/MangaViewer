@@ -34,7 +34,7 @@
             div_mangaAuthor = d.getElementById("div-manga-author"),
             label_mangaAuthor = d.getElementById("manga-author"),
             div_mangaChapter = d.getElementById("div-manga-chapter"),
-            label_mangaChapter = d.getElementById("manga-chapter"),
+            select_mangaChapter = d.getElementById("manga-chapter"),
             img_cover = d.getElementById("img-cover"),
             imgList = d.getElementById("content"),
             pageSelector = d.getElementById("page-selector");
@@ -114,48 +114,82 @@
                 var obj = JSON.parse(str);
                 label_mangaName.textContent = d.title = obj.name;
 
+                const loadChapter = function (chapterName, pages) {
+                    clearAllChildNodes(pageSelector);
+                    clearAllChildNodes(imgList);
+                    if (pages) {
+                        let firstImg;
+                        for (const index in pages) {
+                            const pageNumber = 1 + (((typeof (index) === "string") ? parseInt(index) : index) || 0);
+                            const image = d.createElement("img");
+                            image.classList.add("manga-page");
+                            image.src = uriPrefix_GetImgApi + pages[index];
+
+                            if (index === 0) {
+                                firstImg = image;
+                                if (!coverurl) {
+                                    coverurl = uriPrefix_GetImgApi + pages[index];
+                                }
+                            }
+
+                            image.setAttribute("page-number", pageNumber);
+                            imgList.appendChild(image);
+                            observer.observe(image);
+                            const option = document.createElement("option");
+                            option.text = pageNumber;
+                            option.value = pageNumber;
+                            pageSelector.appendChild(option);
+                        }
+                    }
+                };
+
+                const chapterSelectionChanged = function (ev) {
+                    ev.preventDefault();
+                    if (obj.chapters) {
+                        console.log(obj.chapters);
+                        const selectedChapter = this.value;
+                        const chapterObj = obj.chapters;
+                        if (chapterObj.hasOwnProperty(selectedChapter)) {
+                            const pageInfo = chapterObj[selectedChapter];
+                            loadChapter(selectedChapter, pageInfo);
+                        }
+                    }
+                };
+
+                let firstChapter = "";
+
                 if (obj.author) {
                     label_mangaAuthor.textContent = obj.author;
                     div_mangaAuthor.classList.remove("hidden");
                 } else {
                     div_mangaAuthor.classList.add("hidden");
                 }
-                if (obj.chapter) {
-                    label_mangaChapter.textContent = obj.author;
-                    div_mangaChapter.classList.remove("hidden");
+                if (obj.chapters) {
+                    for (const chapterName in obj.chapters) {
+                        if (firstChapter === "") firstChapter = chapterName;
+
+                        const element_select = d.createElement("option");
+                        element_select.textContent = chapterName;
+                        element_select.value = chapterName;
+                        select_mangaChapter.appendChild(element_select);
+                    }
+                    select_mangaChapter.addEventListener("change", chapterSelectionChanged);
                 } else {
                     div_mangaChapter.classList.add("hidden");
                 }
 
                 let coverurl = obj.cover || "";
-                let firstImg;
 
-                const pages = obj.images;
-                clearAllChildNodes(pageSelector);
-                clearAllChildNodes(imgList);
-                if (pages) {
-                    for (const index in pages) {
-                        const pageNumber = 1 + (((typeof (index) === "string") ? parseInt(index) : index) || 0);
-                        const image = d.createElement("img");
-                        image.classList.add("manga-page");
-                        image.src = uriPrefix_GetImgApi + pages[index];
-
-                        if (index === 0) {
-                            firstImg = image;
-                            if (!coverurl) {
-                                coverurl = uriPrefix_GetImgApi + pages[index];
-                            }
-                        }
-
-                        image.setAttribute("page-number", pageNumber);
-                        imgList.appendChild(image);
-                        observer.observe(image);
-                        const option = document.createElement("option");
-                        option.text = pageNumber;
-                        option.value = pageNumber;
-                        pageSelector.appendChild(option);
+                if (firstChapter) {
+                    select_mangaChapter.value = firstChapter;
+                } else {
+                    const firstElement = select_mangaChapter.getElementsByTagName("option");
+                    if (firstElement && firstElement.length !== 0) {
+                        select_mangaChapter.value = firstElement.item(0).value;
                     }
                 }
+
+                select_mangaChapter.dispatchEvent(new Event("change"));
 
                 if (coverurl) {
                     img_cover.src = coverurl;

@@ -1,13 +1,8 @@
 ﻿using SharpCompress.Common;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Leayal.MangaViewer.Classes
 {
-    struct DirectoryEntry : IEntry
+    readonly struct DirectoryEntry : IEntry
     {
         private readonly string path;
         internal readonly FileInfo InfoFile;
@@ -18,34 +13,40 @@ namespace Leayal.MangaViewer.Classes
             this.InfoFile = new FileInfo(fullpath);
         }
 
-        public FileStream OpenStream() => this.InfoFile.OpenRead();
+        public readonly FileStream OpenStream() => this.InfoFile.OpenRead();
 
-        public CompressionType CompressionType => CompressionType.None;
+        public readonly CompressionType CompressionType => CompressionType.None;
 
-        public DateTime? ArchivedTime => this.InfoFile.LastAccessTime;
+        public readonly DateTime? ArchivedTime => this.InfoFile.LastAccessTime;
 
-        public long CompressedSize => this.InfoFile.Length;
+        public readonly long CompressedSize => this.InfoFile.Length;
 
-        public long Crc => 0L;
+        public readonly long Crc => 0L;
 
-        public DateTime? CreatedTime => this.InfoFile.CreationTime;
+        public readonly DateTime? CreatedTime => this.InfoFile.CreationTime;
 
-        public string Key => this.path;
+        public readonly string Key => this.path;
 
-        public string? LinkTarget => this.InfoFile.LinkTarget;
+        public readonly string? LinkTarget => this.InfoFile.LinkTarget;
 
-        public bool IsDirectory => false;
+        public readonly bool IsDirectory => false;
 
-        public bool IsEncrypted => this.InfoFile.Attributes.HasFlag(FileAttributes.Encrypted);
+        public readonly bool IsEncrypted => this.InfoFile.Attributes.HasFlag(FileAttributes.Encrypted);
 
-        public bool IsSplitAfter => false;
+        public readonly bool IsSplitAfter => false;
 
-        public DateTime? LastAccessedTime => this.InfoFile.LastAccessTime;
+        public readonly DateTime? LastAccessedTime => this.InfoFile.LastAccessTime;
 
-        public DateTime? LastModifiedTime => this.InfoFile.LastWriteTime;
+        public readonly DateTime? LastModifiedTime => this.InfoFile.LastWriteTime;
 
-        public long Size => this.InfoFile.Length;
+        public readonly long Size => this.InfoFile.Length;
 
-        public int? Attrib => (int)this.InfoFile.Attributes;
+        public readonly int? Attrib => (int)this.InfoFile.Attributes;
+
+        public readonly bool IsSolid => true;
+
+        public int VolumeIndexFirst => 0;
+
+        public int VolumeIndexLast => 0;
     }
 }

@@ -3,13 +3,9 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.32014.148
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MangaViewer-Zip", "MangaViewer-Zip\MangaViewer-Zip.csproj", "{DEFA4C16-7A5E-4D71-B6CA-BCBDC534C70F}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MangaViewer", "MangaViewer\MangaViewer.csproj", "{314496B4-E441-4194-94EE-175980A68C3C}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "VisualTreeHelper", "VisualTreeHelper\VisualTreeHelper.csproj", "{68F2BBCD-F330-450D-9632-6F61D930A9F3}"
-EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WPF-SmoothScroller", "WPF-SmoothScroller\WPF-SmoothScroller.csproj", "{8F52C900-65B6-4E2A-B787-3404098FFC77}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MangaViewer", "MangaViewer\MangaViewer.csproj", "{314496B4-E441-4194-94EE-175980A68C3C}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MultipleReaderFileStream-DotNet", "MultipleReaderFileStream-DotNet\MultipleReaderFileStream-DotNet.csproj", "{E06A9937-04C2-4FB2-ADF4-BE314594B670}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -17,22 +13,14 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{DEFA4C16-7A5E-4D71-B6CA-BCBDC534C70F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{DEFA4C16-7A5E-4D71-B6CA-BCBDC534C70F}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{DEFA4C16-7A5E-4D71-B6CA-BCBDC534C70F}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{DEFA4C16-7A5E-4D71-B6CA-BCBDC534C70F}.Release|Any CPU.Build.0 = Release|Any CPU
-		{68F2BBCD-F330-450D-9632-6F61D930A9F3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{68F2BBCD-F330-450D-9632-6F61D930A9F3}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{68F2BBCD-F330-450D-9632-6F61D930A9F3}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{68F2BBCD-F330-450D-9632-6F61D930A9F3}.Release|Any CPU.Build.0 = Release|Any CPU
-		{8F52C900-65B6-4E2A-B787-3404098FFC77}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{8F52C900-65B6-4E2A-B787-3404098FFC77}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{8F52C900-65B6-4E2A-B787-3404098FFC77}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{8F52C900-65B6-4E2A-B787-3404098FFC77}.Release|Any CPU.Build.0 = Release|Any CPU
 		{314496B4-E441-4194-94EE-175980A68C3C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{314496B4-E441-4194-94EE-175980A68C3C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{314496B4-E441-4194-94EE-175980A68C3C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{314496B4-E441-4194-94EE-175980A68C3C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E06A9937-04C2-4FB2-ADF4-BE314594B670}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E06A9937-04C2-4FB2-ADF4-BE314594B670}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E06A9937-04C2-4FB2-ADF4-BE314594B670}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E06A9937-04C2-4FB2-ADF4-BE314594B670}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -68,7 +68,7 @@ namespace Leayal.MangaViewer.Classes
             return false;
         }
 
-        public EntryStream OpenEntryStream()
+        public EntryStream? OpenEntryStream()
         {
             return _CreateEntryStream?.Invoke(this, this.entry.InfoFile.OpenRead());
         }

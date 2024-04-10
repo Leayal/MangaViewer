@@ -10,6 +10,9 @@ using SharpCompress.Readers;
 using System.Runtime.InteropServices;
 using System.ComponentModel;
 using Leayal.MangaViewer.Classes;
+using System.Runtime.CompilerServices;
+using System;
+using System.IO;
 
 namespace Leayal.MangaViewer
 {
@@ -22,21 +25,23 @@ namespace Leayal.MangaViewer
 
         internal static readonly RecyclableMemoryStreamManager memMgr;
         internal static readonly Assembly CurrentMe;
+        internal readonly static System.Buffers.SearchValues<char> directorySeparatorChars = System.Buffers.SearchValues.Create(new char[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar });
 
         static Form1()
         {
             CurrentMe = Assembly.GetExecutingAssembly();
-            memMgr = new RecyclableMemoryStreamManager();
+            memMgr = new RecyclableMemoryStreamManager(new RecyclableMemoryStreamManager.Options()
+            {
+                GenerateCallStacks = false,
+                AggressiveBufferReturn = true
+            });
         }
 
         private readonly WebView2 web;
         private readonly CancellationTokenSource cancelSrc;
         private CoreWebView2Environment webEnv;
-        internal readonly Dictionary<Guid, StreamInfo> mapping_filestreams;
-        internal readonly SortedList<string, Guid> mapping_filenames;
-        private IArchive? currentArchive;
-        internal Task? t_parseArchive;
-        internal string archiveName;
+        internal Task<MangaInfo>? t_parseManga;
+        internal MangaInfo? currentOpeningManga;
         private readonly BrowserController controller;
         private bool addedController;
         private string? _preopenSomething;
@@ -50,10 +55,8 @@ namespace Leayal.MangaViewer
 
         public Form1(string? preopenSomething)
         {
-            this.archiveName = string.Empty;
-            this.currentArchive = null;
-            this.mapping_filestreams = new Dictionary<Guid, StreamInfo>();
-            this.mapping_filenames = new SortedList<string, Guid>(NaturalComparer.Default);
+            Unsafe.SkipInit(out web);
+            Unsafe.SkipInit(out webEnv);
             this.cancelSrc = new CancellationTokenSource();
             this.controller = new BrowserController(this, Uri_ArchiveGetImage);
             this.addedController = false;
@@ -205,6 +208,7 @@ namespace Leayal.MangaViewer
             core.AddWebResourceRequestedFilter(Uri_ArchiveInfo, CoreWebView2WebResourceContext.XmlHttpRequest);
             core.AddWebResourceRequestedFilter(Uri_ArchiveOpen, CoreWebView2WebResourceContext.All);
             core.AddWebResourceRequestedFilter(Uri_ArchiveGetImage + "*", CoreWebView2WebResourceContext.Image);
+            core.ContextMenuRequested += Core_ContextMenuRequested;
 
             core.Settings.IsWebMessageEnabled = true;
             core.Settings.IsStatusBarEnabled = false;
@@ -226,6 +230,94 @@ namespace Leayal.MangaViewer
             if (Uri.TryCreate(new Uri(Uri_WebHome), "index.html", out var homepage))
             {
                 this.web.Source = homepage;
+            }
+        }
+
+        private void Core_ContextMenuRequested(object? sender, CoreWebView2ContextMenuRequestedEventArgs e)
+        {
+            if (e.ContextMenuTarget.Kind == CoreWebView2ContextMenuTargetKind.Image && sender is CoreWebView2 core)
+            {
+                var count = e.MenuItems.Count;
+                for (int i = 0; i < count; i++)
+                {
+                    switch (e.MenuItems[i].CommandId)
+                    {
+                        case 50110:
+                            var olditem = e.MenuItems[i];
+                            var item = core.Environment.CreateContextMenuItem("Sa&ve image as", olditem.Icon, CoreWebView2ContextMenuItemKind.Command);
+                            var uri = e.ContextMenuTarget.SourceUri;
+                            var openingManga = this.currentOpeningManga;
+
+                            EventHandler<object>? callback = null;
+                            callback = (menu, _) =>
+                            {
+                                item.CustomItemSelected -= callback;
+                                if (openingManga == null) return;
+                                if (uri.StartsWith(Uri_ArchiveGetImage, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    var str_Guid = GetRelativePathFromUrl(uri);
+                                    var fileId = Guid.Parse(str_Guid.Span);
+                                    if (openingManga.TryGetImageContent(fileId, out var stream))
+                                    {
+                                        this.BeginInvoke(this.Core_ImageSaveAsWorkaround, new Tuple<ReadOnlyMemory<char>, Stream>(openingManga.TryGetFilename(fileId, out var filename) ? filename : str_Guid, stream));
+                                    }
+                                }
+                            };
+
+                            item.CustomItemSelected += callback;
+                            e.MenuItems[i] = item;
+
+                            break;
+                        case 50111:
+                            e.MenuItems.RemoveAt(i);
+                            break;
+                    }
+                }
+            }
+        }
+
+        private void Core_ImageSaveAsWorkaround(Tuple<ReadOnlyMemory<char>, Stream> streaminfo)
+        {
+            using (var sfd = new SaveFileDialog())
+            {
+                var filenameSpan = streaminfo.Item1.Span;
+                var ext = Path.GetExtension(filenameSpan);
+                sfd.FileName = new string(Path.GetFileName(filenameSpan));
+                sfd.RestoreDirectory = true;
+                sfd.DefaultExt = new string(ext);
+                if (ext.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
+                {
+                    sfd.Filter = "PNG Image|*.png";
+                }
+                else if (ext.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase))
+                {
+                    sfd.Filter = "JPEG Image|*.jpg";
+                }
+                else if (ext.EndsWith(".webp", StringComparison.OrdinalIgnoreCase))
+                {
+                    sfd.Filter = "WEBP Image|*.webp";
+                }
+                else if (ext.EndsWith(".bmp", StringComparison.OrdinalIgnoreCase))
+                {
+                    sfd.Filter = "Bitmap Image|*.bmp";
+                }
+                if (sfd.ShowDialog(this) == DialogResult.OK)
+                {
+                    Task.Factory.StartNew(async tuple =>
+                    {
+                        if (tuple is Tuple<Stream, string> data)
+                        {
+                            var (stream, dst) = data;
+                            stream.Position = 0;
+                            using (var handle = File.OpenHandle(dst, FileMode.Create, FileAccess.Write, FileShare.None, FileOptions.Asynchronous, stream.Length))
+                            using (var fs = new FileStream(handle, FileAccess.Write, 0))
+                            {
+                                await stream.CopyToAsync(fs, 4096 * 3).ConfigureAwait(false);
+                                await fs.FlushAsync().ConfigureAwait(false);
+                            }
+                        }
+                    }, new Tuple<Stream, string>(streaminfo.Item2, sfd.FileName));
+                }
             }
         }
 
@@ -352,10 +444,11 @@ namespace Leayal.MangaViewer
             this.CloseCurrentArchive();
             try
             {
-                this.currentArchive = new Classes.DirectoryAsArchive(directoryPath);
-                this.archiveName = Path.GetFileName(directoryPath);
-                this.t_parseArchive = Task.Factory.StartNew(this.ParseArchive, this.currentArchive);
-                await this.t_parseArchive;
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
+                MangaInfo DoWork(object? obj) => (obj is string str ? MangaInfo.FromDirectory(str) : throw new Exception("Can't be here anyway"));
+                this.t_parseManga = Task.Factory.StartNew(DoWork, directoryPath);
+                var newMangaInfo = await this.t_parseManga;
+                this.currentOpeningManga = newMangaInfo;
                 await this.OnLoadArchiveComplete();
             }
             catch
@@ -369,72 +462,27 @@ namespace Leayal.MangaViewer
         {
             await (await this.t_webTask).SetState("loading");
             this.CloseCurrentArchive();
-            var fs = File.OpenRead(filename);
             try
             {
-                if (SharpCompress.Archives.SevenZip.SevenZipArchive.IsSevenZipFile(fs))
-                {
-                    this.currentArchive = SharpCompress.Archives.SevenZip.SevenZipArchive.Open(filename, new ReaderOptions() { LeaveStreamOpen = false });
-                }
-                else
-                {
-                    this.currentArchive = ArchiveFactory.Open(filename, new ReaderOptions() { LeaveStreamOpen = false });
-                }
-                this.archiveName = Path.GetFileName(fs.Name);
-                this.t_parseArchive = Task.Factory.StartNew(this.ParseArchive, this.currentArchive);
-                await this.t_parseArchive;
+                this.t_parseManga = Task.Factory.StartNew(this.ParseArchive, filename);
+                var newMangaInfo = await this.t_parseManga;
+                this.currentOpeningManga = newMangaInfo;
                 await this.OnLoadArchiveComplete();
             }
             catch
             {
                 this.CloseCurrentArchive();
-                fs.Dispose();
                 throw;
             }
         }
 
-        private void ParseArchive(object? obj)
+        private MangaInfo ParseArchive(object? obj)
         {
-            if (obj is IArchive archive)
+            if (obj is string str)
             {
-                lock (this.mapping_filenames)
-                    lock (this.mapping_filestreams)
-                    {
-                        this.mapping_filestreams.Clear();
-                        this.mapping_filenames.Clear();
-                        using (var walker = archive.ExtractAllEntries())
-                        {
-                            try
-                            {
-                                while (walker.MoveToNextEntry())
-                                {
-                                    var entry = walker.Entry;
-                                    if (!entry.IsDirectory)
-                                    {
-                                        if (entry is Classes.DirectoryEntry fakeEntry)
-                                        {
-                                            var guid = Guid.NewGuid();
-                                            this.mapping_filenames.Add(fakeEntry.Key, guid);
-                                            this.mapping_filestreams.Add(guid, new StreamInfo(fakeEntry.Key, fakeEntry.OpenStream()));
-                                        }
-                                        else
-                                        {
-                                            var guid = Guid.NewGuid();
-                                            this.mapping_filenames.Add(entry.Key, guid);
-                                            var stream = new RecyclableMemoryStream(memMgr, guid, entry.Key);
-                                            stream.Position = 0;
-                                            stream.SetLength(entry.Size);
-                                            walker.WriteEntryTo(stream);
-                                            stream.Position = 0;
-                                            this.mapping_filestreams.Add(guid, new StreamInfo(entry.Key, stream));
-                                        }
-                                    }
-                                }
-                            }
-                            catch { }
-                        }
-                    }
+                return MangaInfo.CreateFromArchive(str);
             }
+            return null;
         }
 
         private async Task OnLoadArchiveComplete()
@@ -483,34 +531,49 @@ namespace Leayal.MangaViewer
             {
                 using (var deferral = e.GetDeferral())
                 {
-                    if (this.t_parseArchive is not null)
+                    MangaInfo? mangaInfo = (this.t_parseManga == null ? this.currentOpeningManga : (await this.t_parseManga));
+                    if (mangaInfo == null)
                     {
-                        await this.t_parseArchive;
+                        e.Response = this.webEnv.CreateWebResourceResponse(null, 500, "Internal Error", string.Empty);
+                        return;
                     }
-                    var path = GetRelativePathFromUrl(e.Request.Uri);
-                    if (Guid.TryParse(path.Span, out var guid) && this.mapping_filestreams.TryGetValue(guid, out var streaminfo))
+                    var str_Guid = GetRelativePathFromUrl(e.Request.Uri);
+                    var fileId = Guid.Parse(str_Guid.Span);
+                    if (mangaInfo.TryGetImageContent(fileId, out var stream))
                     {
-                        var stream = streaminfo.DataStream;
-                        var filepath = streaminfo.Name;
                         stream.Position = 0;
                         var rep = this.webEnv.CreateWebResourceResponse(stream, 200, "OK", string.Empty);
                         rep.Headers.AppendHeader("Content-Length", stream.Length.ToString());
                         rep.Headers.AppendHeader("Cache-Control", "no-cache");
-                        if (filepath.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
+
+                        static void SetContentType(CoreWebView2WebResourceResponse rep, ReadOnlyMemory<char> path)
                         {
-                            rep.Headers.AppendHeader("Content-Type", "image/png");
+                            var filepath = path.Span;
+                            if (filepath.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
+                            {
+                                rep.Headers.AppendHeader("Content-Type", "image/png");
+                            }
+                            else if (filepath.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase))
+                            {
+                                rep.Headers.AppendHeader("Content-Type", "image/jpeg");
+                            }
+                            else if (filepath.EndsWith(".webp", StringComparison.OrdinalIgnoreCase))
+                            {
+                                rep.Headers.AppendHeader("Content-Type", "image/webp");
+                            }
+                            else if (filepath.EndsWith(".bmp", StringComparison.OrdinalIgnoreCase))
+                            {
+                                rep.Headers.AppendHeader("Content-Type", "image/bmp");
+                            }
                         }
-                        else if (filepath.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase))
+
+                        if (mangaInfo.TryGetFilename(fileId, out var filename))
                         {
-                            rep.Headers.AppendHeader("Content-Type", "image/jpeg");
+                            SetContentType(rep, filename);
                         }
-                        else if (filepath.EndsWith(".webp", StringComparison.OrdinalIgnoreCase))
+                        else
                         {
-                            rep.Headers.AppendHeader("Content-Type", "image/webp");
-                        }
-                        else if (filepath.EndsWith(".bmp", StringComparison.OrdinalIgnoreCase))
-                        {
-                            rep.Headers.AppendHeader("Content-Type", "image/bmp");
+                            rep.Headers.AppendHeader("Content-Type", "image/*");
                         }
                         e.Response = rep;
                     }
@@ -544,10 +607,8 @@ namespace Leayal.MangaViewer
                     state.Span.CopyTo(c);
                     for (int i = 0; i < c.Length; i++)
                     {
-                        if (c[i] == Path.AltDirectorySeparatorChar)
-                        {
-                            c[i] = Path.DirectorySeparatorChar;
-                        }
+                        ref var currentChar = ref c[i];
+                        if (currentChar == Path.AltDirectorySeparatorChar) currentChar = Path.DirectorySeparatorChar;
                     }
                 });
             }
@@ -555,23 +616,48 @@ namespace Leayal.MangaViewer
 
         private void CloseCurrentArchive()
         {
-            if (this.currentArchive is not null)
+            Interlocked.Exchange(ref this.currentOpeningManga, null)?.Dispose();
+        }
+
+        internal string BrowseForArchive()
+        {
+            using (var ofd = new OpenFileDialog()
             {
-                this.currentArchive.Dispose();
-                this.currentArchive = null;
-            }
-            this.archiveName = string.Empty;
-            lock (this.mapping_filenames)
+                Filter = "Archive Files|*.zip;*.7z;*.rar;*.tar;*.gz|Any Files|*",
+                CheckFileExists = true,
+                CheckPathExists = true,
+                Multiselect = false
+            })
             {
-                this.mapping_filenames.Clear();
-            }
-            lock (this.mapping_filestreams)
-            {
-                foreach (var stream in this.mapping_filestreams.Values)
+                if (ofd.ShowDialog(this) == DialogResult.OK)
                 {
-                    stream.DataStream.Dispose();
+                    return ofd.FileName;
                 }
-                this.mapping_filestreams.Clear();
+                else
+                {
+                    return string.Empty;
+                }
+            }
+        }
+
+        internal string BrowseForDirectory()
+        {
+            using (var ofd = new FolderBrowserDialog()
+            {
+                AutoUpgradeEnabled = true,
+                ShowNewFolderButton = false,
+                UseDescriptionForTitle = true,
+                Description = "Select folder to view all image(s) within"
+            })
+            {
+                if (ofd.ShowDialog(this) == DialogResult.OK)
+                {
+                    return ofd.SelectedPath;
+                }
+                else
+                {
+                    return string.Empty;
+                }
             }
         }
 

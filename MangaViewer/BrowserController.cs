@@ -1,64 +1,31 @@
-﻿using System;
+﻿using Leayal.MangaViewer.Classes;
+using Microsoft.IO;
+using SharpCompress.Writers;
+using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
+using System.Text.Unicode;
 using System.Threading.Tasks;
 
 namespace Leayal.MangaViewer
 {
-    partial class Form1
+    public interface IBrowserController
     {
-        internal string BrowseForArchive()
-        {
-            using (var ofd = new OpenFileDialog()
-            {
-                Filter = "Archive Files|*.zip;*.7z;*.rar;*.tar;*.gz|Any Files|*",
-                CheckFileExists = true,
-                CheckPathExists = true,
-                Multiselect = false
-            })
-            {
-                if (ofd.ShowDialog(this) == DialogResult.OK)
-                {
-                    return ofd.FileName;
-                }
-                else
-                {
-                    return string.Empty;
-                }
-            }
-        }
+        string Endpoint_ArchiveGetImage { get; }
 
-        internal string BrowseForDirectory()
-        {
-            using (var ofd = new FolderBrowserDialog()
-            {
-                AutoUpgradeEnabled = true,
-                ShowNewFolderButton = false,
-                UseDescriptionForTitle = true,
-                Description = "Select folder to view all image(s) within"
-            })
-            {
-                if (ofd.ShowDialog(this) == DialogResult.OK)
-                {
-                    return ofd.SelectedPath;
-                }
-                else
-                {
-                    return string.Empty;
-                }
-            }
-        }
+        string OpenArchive();
     }
 
-    [ClassInterface(ClassInterfaceType.AutoDual)]
+    [ClassInterface(ClassInterfaceType.None)]
     [ComVisible(true)]
-    public class BrowserController
+    public class BrowserController : IBrowserController
     {
         public string Endpoint_ArchiveGetImage { get; }
 
         private readonly Form1 _form;
+
         public BrowserController(Form1 form, string endpoint_archiveGetImage)
         {
             this._form = form;
@@ -67,52 +34,68 @@ namespace Leayal.MangaViewer
 
         public string OpenArchive()
         {
-            var collection = this._form.mapping_filenames;
-            lock (collection)
+            if (this._form.currentOpeningManga is MangaInfo mangaObj)
             {
-                if (collection.Count == 0)
+                lock (mangaObj)
                 {
-                    return string.Empty;
-                }
-                else
-                {
-                    using (var mem = Form1.memMgr.GetStream("MangaInfo"))
+                    var mangaName = string.IsNullOrEmpty(mangaObj.MangaName) ? string.Empty : mangaObj.MangaName;
+                    using (var tmpMem = Form1.memMgr.GetStream())
                     {
-                        mem.SetLength(0);
-                        using (var writer = new Utf8JsonWriter(mem, new JsonWriterOptions() { Indented = false }))
+                        tmpMem.Position = 0;
+                        using (var writer = new Utf8JsonWriter((System.Buffers.IBufferWriter<byte>)tmpMem, new JsonWriterOptions() { Indented = false }))
                         {
                             writer.WriteStartObject();
+                            writer.WriteString("name", mangaName);
+                            writer.WritePropertyName("chapters");
+                            writer.WriteStartObject();
 
-                            writer.WriteString("name", this._form.archiveName ?? string.Empty);
-
-                            writer.WriteStartArray("images");
-                            foreach (var imgname in collection)
+                            var chapters = mangaObj.Chapters;
+                            var chapterLen = chapters.Length;
+                            for (int chapterIndex = 0; chapterIndex < chapterLen; chapterIndex++)
                             {
-                                writer.WriteStringValue(imgname.Value);
+                                ref readonly var chapterInfo = ref chapters[chapterIndex];
+                                // Begin chapter descriptions
+                                var chapterName = chapterInfo.ChapterName.Span;
+                                var pages = chapterInfo.Pages;
+                                var pageLen = pages.Count;
+
+                                writer.WriteStartArray(chapterName.IsEmpty ? IMangaChapterParser.Chapter0 : chapterName);
+                                for (int pageIndex = 0; pageIndex < pageLen; pageIndex++)
+                                {
+                                    writer.WriteStringValue(pages[pageIndex].ToString());
+                                }
+
+                                writer.WriteEndArray();
                             }
-                            writer.WriteEndArray();
 
                             writer.WriteEndObject();
+                            writer.WriteEndObject();
+
                             writer.Flush();
                         }
-                        mem.Position = 0;
-                        if (mem.TryGetBuffer(out var seg))
+                        tmpMem.Position = 0;
+                        using (var sr = new StreamReader(tmpMem, leaveOpen: true))
                         {
-                            return Encoding.UTF8.GetString(new ReadOnlySpan<byte>(seg.Array, seg.Offset, seg.Count));
-                        }
-                        else
-                        {
-                            return Encoding.UTF8.GetString(mem.ToArray());
+                            return sr.ReadToEnd();
                         }
                     }
                 }
             }
+            else
+            {
+                return string.Empty;
+            }
         }
     }
 
-    [ClassInterface(ClassInterfaceType.AutoDual)]
+    public interface IMangaObj
+    {
+
+    }
+
+    [ClassInterface(ClassInterfaceType.None)]
     [ComVisible(true)]
-    public class MangaObj
+    public class MangaObj : IMangaObj
     {
 
     }
