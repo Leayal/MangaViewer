@@ -24,12 +24,12 @@ namespace Leayal.MangaViewer.Classes
                 if (SharpCompress.Archives.SevenZip.SevenZipArchive.IsSevenZipFile(fs))
                 {
                     fs.Position = oldPos;
-                    currentArchive = SharpCompress.Archives.SevenZip.SevenZipArchive.Open(fs, new ReaderOptions() { LeaveStreamOpen = false });
+                    currentArchive = SharpCompress.Archives.SevenZip.SevenZipArchive.OpenArchive(fs, new ReaderOptions() { LeaveStreamOpen = false });
                 }
                 else
                 {
                     fs.Position = oldPos;
-                    currentArchive = ArchiveFactory.Open(fs, new ReaderOptions() { LeaveStreamOpen = false });
+                    currentArchive = ArchiveFactory.OpenArchive(fs, new ReaderOptions() { LeaveStreamOpen = false });
                 }
                 var filepath = fs.Name;
                 var dirRecords = new DirectoryRecord(ReadOnlyMemory<char>.Empty);
@@ -249,35 +249,76 @@ namespace Leayal.MangaViewer.Classes
                     {
                         this.cached_entry_header = null;
                         var entries = new Dictionary<Guid, NotClosingStream<RecyclableMemoryStream>>();
-                        using (var reader = archive.ExtractAllEntries())
+                        
+                        if (archive.IsSolid || archive.Type == ArchiveType.SevenZip)
                         {
-                            while (reader.MoveToNextEntry())
+                            using (var reader = archive.ExtractAllEntries())
                             {
-                                var currentEntry = reader.Entry;
-                                if (!currentEntry.IsDirectory)
+                                while (reader.MoveToNextEntry())
                                 {
-                                    var entryName = currentEntry.Key;
-                                    if (IsImageFile(entryName))
+                                    var currentEntry = reader.Entry;
+                                    if (!currentEntry.IsDirectory)
                                     {
-                                        var fileId = Guid.NewGuid();
-                                        var mem_EntryName = entryName.AsMemory();
-
-                                        map_fileId_filename.Add(fileId, mem_EntryName);
-                                        var filename = GetFilenameAsMemory(mem_EntryName);
-                                        var directoryPath = GetDirectoryPathInArchive(mem_EntryName);
-
-                                        var memStream = Form1.memMgr.GetStream(null, reader.Entry.Size);
-                                        reader.WriteEntryTo(memStream);
-
-                                        entries.Add(fileId, new NotClosingStream<RecyclableMemoryStream>(memStream));
-
-                                        if (directoryPath.IsEmpty)
+                                        var entryName = currentEntry.Key;
+                                        if (IsImageFile(entryName))
                                         {
-                                            dirRecords.ChildFiles.Add(filename, fileId);
+                                            var fileId = Guid.NewGuid();
+                                            var mem_EntryName = entryName.AsMemory();
+
+                                            map_fileId_filename.Add(fileId, mem_EntryName);
+                                            var filename = GetFilenameAsMemory(mem_EntryName);
+                                            var directoryPath = GetDirectoryPathInArchive(mem_EntryName);
+
+                                            var memStream = Form1.memMgr.GetStream(null, reader.Entry.Size);
+                                            reader.WriteEntryTo(memStream);
+
+                                            entries.Add(fileId, new NotClosingStream<RecyclableMemoryStream>(memStream));
+
+                                            if (directoryPath.IsEmpty)
+                                            {
+                                                dirRecords.ChildFiles.Add(filename, fileId);
+                                            }
+                                            else
+                                            {
+                                                dirRecords.ParseFromPath(directoryPath).ChildFiles.Add(filename, fileId);
+                                            }
                                         }
-                                        else
+                                    }
+                                }
+                            }
+                        }
+                        else
+                        {
+                            using (var reader = archive.Entries.GetEnumerator())
+                            {
+                                while (reader.MoveNext())
+                                {
+                                    var currentEntry = reader.Current;
+                                    if (!currentEntry.IsDirectory)
+                                    {
+                                        var entryName = currentEntry.Key;
+                                        if (IsImageFile(entryName))
                                         {
-                                            dirRecords.ParseFromPath(directoryPath).ChildFiles.Add(filename, fileId);
+                                            var fileId = Guid.NewGuid();
+                                            var mem_EntryName = entryName.AsMemory();
+
+                                            map_fileId_filename.Add(fileId, mem_EntryName);
+                                            var filename = GetFilenameAsMemory(mem_EntryName);
+                                            var directoryPath = GetDirectoryPathInArchive(mem_EntryName);
+
+                                            var memStream = Form1.memMgr.GetStream(null, currentEntry.Size);
+                                            currentEntry.WriteTo(memStream);
+
+                                            entries.Add(fileId, new NotClosingStream<RecyclableMemoryStream>(memStream));
+
+                                            if (directoryPath.IsEmpty)
+                                            {
+                                                dirRecords.ChildFiles.Add(filename, fileId);
+                                            }
+                                            else
+                                            {
+                                                dirRecords.ParseFromPath(directoryPath).ChildFiles.Add(filename, fileId);
+                                            }
                                         }
                                     }
                                 }

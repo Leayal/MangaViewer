@@ -32,10 +32,11 @@ namespace Leayal.MangaViewer.Classes
 
         public long TotalUncompressSize => -1;
 
-        public event EventHandler<ArchiveExtractionEventArgs<IArchiveEntry>>? EntryExtractionBegin;
-        public event EventHandler<ArchiveExtractionEventArgs<IArchiveEntry>>? EntryExtractionEnd;
-        public event EventHandler<CompressedBytesReadEventArgs>? CompressedBytesRead;
-        public event EventHandler<FilePartExtractionBeginEventArgs>? FilePartExtractionBegin;
+        public ReaderOptions ReaderOptions => null;
+
+        public long TotalUncompressedSize => 0;
+
+        public bool IsEncrypted => false;
 
         public void Dispose() { }
 

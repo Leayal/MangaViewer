@@ -40,9 +40,7 @@ namespace Leayal.MangaViewer.Classes
 
         public bool Cancelled => this._cancel;
 
-        public event EventHandler<ReaderExtractionEventArgs<IEntry>> EntryExtractionProgress;
-        public event EventHandler<CompressedBytesReadEventArgs> CompressedBytesRead;
-        public event EventHandler<FilePartExtractionBeginEventArgs> FilePartExtractionBegin;
+        public ArchiveType Type => throw new NotImplementedException();
 
         public void Cancel()
         {

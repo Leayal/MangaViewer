@@ -1,4 +1,5 @@
 ﻿using SharpCompress.Common;
+using SharpCompress.Common.Options;
 
 namespace Leayal.MangaViewer.Classes
 {
@@ -48,5 +49,7 @@ namespace Leayal.MangaViewer.Classes
         public int VolumeIndexFirst => 0;
 
         public int VolumeIndexLast => 0;
+
+        public IReaderOptions? Options => null;
     }
 }
